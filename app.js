@@ -519,30 +519,131 @@ function abrirHoja(html) {
 function cerrarHoja() { $("#hoja").classList.add("oculto"); $("#velo").classList.add("oculto"); $("#hoja").innerHTML = ""; }
 $("#velo").addEventListener("click", cerrarHoja);
 
+// Opciones rápidas por categoría (se suman los títulos que más usan)
+const RAPIDOS = {
+  medico: ["Pediatra", "Dentista", "Vacuna", "Análisis de laboratorio", "Oftalmólogo"],
+  escuela: ["Junta de padres", "Entrega de boletas", "Festival", "Tarea / proyecto", "Excursión"],
+  fiestas: ["Fiesta de cumpleaños", "Comprar regalo", "Posada"],
+  basquet: ["Partido de básquet", "Entrenamiento de básquet", "Torneo"],
+  entrenamientos: ["Entrenamiento", "Natación", "Fútbol", "Clase de baile"],
+  pendientes: ["Llevar ropa a planchar", "Recoger ropa", "Pagar colegiatura", "Pagar servicios"],
+  otro: []
+};
+const LLEVAR_RAPIDO = {
+  medico: ["Cartilla de vacunación", "Credencial / seguro", "Estudios anteriores"],
+  escuela: ["Boleta", "Credencial", "Material", "Disfraz"],
+  fiestas: ["Regalo", "Tarjeta", "Ropa de cambio"],
+  basquet: ["Uniforme", "Tenis", "Agua", "Balón", "Toalla"],
+  entrenamientos: ["Ropa deportiva", "Agua", "Toalla", "Snack"],
+  pendientes: ["Ropa", "Comprobante", "Dinero"],
+  otro: []
+};
+const HORAS_RAPIDAS = ["08:00", "09:00", "10:00", "12:00", "16:00", "17:00", "18:00", "19:00"];
+
+function titulosRapidos(catId) {
+  const base = RAPIDOS[catId] || [];
+  const conteo = {};
+  eventos.filter((e) => e.categoriaId === catId && e.titulo).forEach((e) => (conteo[e.titulo] = (conteo[e.titulo] || 0) + 1));
+  const usados = Object.keys(conteo).filter((t) => !base.includes(t)).sort((a, b) => conteo[b] - conteo[a]).slice(0, 4);
+  return [...usados, ...base];
+}
+const chipBtn = (attr, val, texto, activo, color) =>
+  `<button type="button" class="chip ${activo ? "activo" : ""}" ${attr}="${esc(val)}">${color ? `<span class="punto" style="background:${esc(color)}"></span>` : ""}${esc(texto)}</button>`;
+
+function pintarRapidos() {
+  const f = $("#hoja form[data-form=evento]"); if (!f) return;
+  const catId = f.categoriaId.value, titulo = f.titulo.value;
+  $("#rapidos").innerHTML = titulosRapidos(catId).map((t) => chipBtn("data-pick-titulo", t, t, t === titulo)).join("") +
+    `<button type="button" class="chip" data-pick-titulo="__otro">✏️ Otro</button>`;
+  const llevar = f.llevar.value.split("\n").map((x) => x.trim());
+  $("#llevar-rapido").innerHTML = (LLEVAR_RAPIDO[catId] || []).map((t) => chipBtn("data-pick-llevar", t, "＋ " + t, llevar.includes(t))).join("");
+}
+
 function formEvento(ev = {}, fechaDefault) {
   const recs = ev.recordatorios || (ev.id ? [] : [60, 1440]);
-  const cats = categorias.length ? categorias : CATS_DEFAULT.map(([id, nombre]) => ({ id, nombre }));
+  const cats = categorias.length ? categorias : CATS_DEFAULT.map(([id, nombre, color]) => ({ id, nombre, color }));
+  const catSel = ev.categoriaId || cats[0].id;
+  const fecha = ev.fecha || fechaDefault || hoy();
+  const hora = ev.hora || "";
+  const quien = ev.quien ?? "ambos";
+  const rep = ev.repetir || "no";
+  const quienes = [...miembrosOrden().map((m) => [m.id, m.nombre || m.email]), ["ambos", "Ambos"], ["", "Nadie en particular"]];
   abrirHoja(`<h2>${ev.id ? "Editar" : "Nuevo evento"}</h2>
-  <form data-form="evento" data-id="${ev.id || ""}">
-    <div class="campo"><label>¿Qué es?</label><input name="titulo" value="${esc(ev.titulo || "")}" placeholder="Ej. Pediatra — vacuna" required></div>
-    ${familia.length ? `<div class="campo"><span class="etq">¿Para quién es?</span><div class="chips" style="flex-wrap:wrap">
+  <form data-form="evento" data-id="${ev.id || ""}" novalidate>
+    <div class="campo"><span class="etq">Categoría</span><input type="hidden" name="categoriaId" value="${esc(catSel)}">
+      <div class="chips envolver" data-grupo="categoriaId">${cats.map((c) => chipBtn("data-pick", c.id, c.nombre, c.id === catSel, c.color)).join("")}</div></div>
+
+    <div class="campo"><span class="etq">¿Qué es?</span>
+      <div class="chips envolver" id="rapidos"></div>
+      <div id="box-titulo" class="${ev.titulo ? "" : "oculto"}"><input name="titulo" value="${esc(ev.titulo || "")}" placeholder="Escribe qué es (ej. Pediatra — vacuna)" autocomplete="off"></div></div>
+
+    ${familia.length ? `<div class="campo"><span class="etq">¿Para quién es?</span><div class="chips envolver">
       ${familia.map((f) => `<label class="chip" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="para" value="${f.id}" ${(ev.para || []).includes(f.id) ? "checked" : ""} style="width:16px;height:16px;accent-color:${esc(f.color)}"><span class="punto" style="background:${esc(f.color)}"></span>${esc(f.nombre)}</label>`).join("")}
-    </div><p class="vacio" style="margin:0;padding:0">Puedes marcar varios (ej. fiesta a la que van dos). Sin marcar = de los papás / general.</p></div>` : ""}
-    <div class="campo"><label>Categoría</label><select name="categoriaId">${cats.map((c) => `<option value="${c.id}" ${ev.categoriaId === c.id ? "selected" : ""}>${esc(c.nombre)}</option>`).join("")}</select></div>
-    <div class="dos campo"><div><label class="etq">Fecha</label><input type="date" name="fecha" value="${esc(ev.fecha || fechaDefault || hoy())}" required></div>
-      <div><label class="etq">Hora</label><input type="time" name="hora" value="${esc(ev.hora || "")}"></div></div>
-    <p class="vacio" style="margin:-6px 0 10px">Deja la hora vacía si es todo el día.</p>
+    </div><p class="vacio" style="margin:0;padding:0">Puedes marcar varios. Sin marcar = de los papás / general.</p></div>` : ""}
+
+    <div class="campo"><span class="etq">Fecha</span>
+      <div class="chips envolver" data-grupo="fecha">${[[hoy(), "Hoy"], [addDias(hoy(), 1), "Mañana"], [addDias(hoy(), 2), fechaBonita(addDias(hoy(), 2))]]
+        .map(([v, t]) => chipBtn("data-pick", v, t, v === fecha)).join("")}</div>
+      <input type="date" name="fecha" value="${esc(fecha)}"></div>
+
+    <div class="campo"><span class="etq">Hora</span><input type="hidden" name="hora" value="${esc(hora)}">
+      <div class="chips envolver" data-grupo="hora">${chipBtn("data-pick", "", "Todo el día", !hora)}${HORAS_RAPIDAS.map((h) => chipBtn("data-pick", h, hora12(h).replace(":00", ""), h === hora)).join("")}
+      ${chipBtn("data-pick", "__otra", hora && !HORAS_RAPIDAS.includes(hora) ? "🕐 " + hora12(hora) : "🕐 Otra hora", hora && !HORAS_RAPIDAS.includes(hora))}</div>
+      <input type="time" id="hora-otra" class="${hora && !HORAS_RAPIDAS.includes(hora) ? "" : "oculto"}" value="${esc(hora)}"></div>
+
+    <div class="campo"><span class="etq">¿Quién se encarga?</span><input type="hidden" name="quien" value="${esc(quien)}">
+      <div class="chips envolver" data-grupo="quien">${quienes.map(([v, t]) => chipBtn("data-pick", v, t, v === quien)).join("")}</div></div>
+
     <div class="campo"><label>Lugar</label><input name="lugar" value="${esc(ev.lugar || "")}" placeholder="Ej. Clínica del Valle, cancha 2"></div>
-    <div class="campo"><label>¿Quién se encarga?</label><select name="quien">${opcionesQuien(ev.quien ?? "ambos")}</select></div>
-    <div class="campo"><label>Qué llevar (uno por renglón)</label><textarea name="llevar" placeholder="Cartilla de vacunación&#10;Uniforme&#10;Botella de agua">${esc((ev.llevar || []).join("\n"))}</textarea></div>
-    <div class="dos campo"><div><label class="etq">Se repite</label><select name="repetir">${Object.entries(REPETIR).map(([k, v]) => `<option value="${k}" ${(ev.repetir || "no") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
-      <div><label class="etq">Hasta (opcional)</label><input type="date" name="repetirHasta" value="${esc(ev.repetirHasta || "")}"></div></div>
-    <div class="campo"><span class="etq">Recordatorios</span><div class="chips" style="flex-wrap:wrap">
+
+    <div class="campo"><span class="etq">Qué llevar</span>
+      <div class="chips envolver" id="llevar-rapido"></div>
+      <textarea name="llevar" placeholder="Uno por renglón">${esc((ev.llevar || []).join("\n"))}</textarea></div>
+
+    <div class="campo"><span class="etq">Se repite</span><input type="hidden" name="repetir" value="${esc(rep)}">
+      <div class="chips envolver" data-grupo="repetir">${Object.entries(REPETIR).map(([k, v]) => chipBtn("data-pick", k, v, k === rep)).join("")}</div>
+      <div id="box-hasta" class="${rep === "no" ? "oculto" : ""}"><span class="etq">Hasta (opcional)</span><input type="date" name="repetirHasta" value="${esc(ev.repetirHasta || "")}"></div></div>
+
+    <div class="campo"><span class="etq">Recordatorios</span><div class="chips envolver">
       ${RECORDATORIOS.map(([m, t]) => `<label class="chip" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="rec" value="${m}" ${recs.includes(m) ? "checked" : ""} style="width:16px;height:16px">${t}</label>`).join("")}
     </div></div>
     <div class="campo"><label>Notas</label><textarea name="notas" placeholder="Ej. Ir en ayunas, pagar $350">${esc(ev.notas || "")}</textarea></div>
     <div class="fila-btns"><button type="button" class="btn" data-accion="cerrar">Cancelar</button><button class="btn primario">Guardar</button></div>
   </form>`);
+  pintarRapidos();
+}
+
+// Botones rápidos del formulario
+function elegirRapido(t) {
+  const f = $("#hoja form[data-form=evento]"); if (!f) return false;
+  const d = t.dataset;
+  if (d.pickTitulo !== undefined) {
+    const box = $("#box-titulo");
+    box.classList.remove("oculto");
+    if (d.pickTitulo === "__otro") { f.titulo.value = ""; f.titulo.focus(); }
+    else f.titulo.value = d.pickTitulo;
+    pintarRapidos(); return true;
+  }
+  if (d.pickLlevar !== undefined) {
+    const lineas = f.llevar.value.split("\n").map((x) => x.trim()).filter(Boolean);
+    const i = lineas.indexOf(d.pickLlevar);
+    if (i >= 0) lineas.splice(i, 1); else lineas.push(d.pickLlevar);
+    f.llevar.value = lineas.join("\n"); pintarRapidos(); return true;
+  }
+  if (d.pick !== undefined) {
+    const grupo = t.closest("[data-grupo]").dataset.grupo;
+    if (grupo === "hora" && d.pick === "__otra") {
+      const h = $("#hora-otra"); h.classList.remove("oculto"); h.focus(); try { h.showPicker(); } catch { /* sin selector */ }
+    } else {
+      f[grupo].value = d.pick;
+      if (grupo === "hora") $("#hora-otra").classList.add("oculto");
+    }
+    t.closest("[data-grupo]").querySelectorAll(".chip").forEach((c) => c.classList.toggle("activo", c === t));
+    if (grupo === "categoriaId") pintarRapidos();
+    if (grupo === "repetir") $("#box-hasta").classList.toggle("oculto", d.pick === "no");
+    return true;
+  }
+  return false;
 }
 
 function detalleEvento(id, fecha) {
@@ -604,6 +705,7 @@ document.addEventListener("click", async (e) => {
   if (!t) return;
   const d = t.dataset;
 
+  if (elegirRapido(t)) return;
   if (d.nav) { if (d.nav === "nuevo") formEvento({}, vista === "calendario" ? diaSel : hoy()); else irA(d.nav); return; }
   if (d.filtroQuien) { filtroQuien = d.filtroQuien; render(); return; }
   if (d.filtroCat) { filtroCat = d.filtroCat; render(); return; }
@@ -705,6 +807,16 @@ document.addEventListener("change", (e) => {
   }
   if (d.famColor) updateDoc(doc(db, "familia", d.famColor), { color: t.value }).catch(fallo);
   if (d.famNombre && t.value.trim()) updateDoc(doc(db, "familia", d.famNombre), { nombre: t.value.trim() }).catch(fallo);
+  if (t.id === "hora-otra") {
+    const f = t.form || $("#hoja form[data-form=evento]");
+    f.hora.value = t.value;
+    const otra = $("#hoja [data-grupo=hora] [data-pick='__otra']");
+    $("#hoja [data-grupo=hora]").querySelectorAll(".chip").forEach((c) => c.classList.toggle("activo", c === otra));
+    if (otra) otra.textContent = t.value ? "🕐 " + hora12(t.value) : "🕐 Otra hora";
+  }
+  if (t.name === "fecha" && t.closest("form[data-form=evento]")) {
+    $("#hoja [data-grupo=fecha]").querySelectorAll(".chip").forEach((c) => c.classList.toggle("activo", c.dataset.pick === t.value));
+  }
   if (d.catColor) updateDoc(doc(db, "categorias", d.catColor), { color: t.value }).catch(fallo);
   if (d.catNombre && t.value.trim()) updateDoc(doc(db, "categorias", d.catNombre), { nombre: t.value.trim() }).catch(fallo);
   if (t.matches("[data-pref-avisos]")) {
@@ -720,6 +832,11 @@ document.addEventListener("submit", (e) => {
   const fd = new FormData(f);
   switch (f.dataset.form) {
     case "evento": {
+      if (!fd.get("titulo").trim()) {
+        $("#box-titulo").classList.remove("oculto"); f.titulo.focus();
+        toast("Elige una opción o escribe qué es"); return;
+      }
+      if (!fd.get("fecha")) { toast("Elige la fecha"); return; }
       const datos = {
         titulo: fd.get("titulo").trim(),
         categoriaId: fd.get("categoriaId"),

@@ -97,6 +97,7 @@ let listaSel = "super";
 let desuscribir = [];
 let sembrado = false;
 let promptInstalar = null;
+let servidorUltimo = 0;   // última vez que corrió el programa en Python (ms)
 
 // ---------- Firebase ----------
 const configLista = !String(firebaseConfig.apiKey).startsWith("PEGA");
@@ -188,6 +189,10 @@ function suscribir() {
     }
   });
   escuchar("eventos", (arr) => (eventos = arr));
+  desuscribir.push(onSnapshot(doc(db, "estado", "servidor"), (d) => {
+    const u = d.exists() ? d.data().ultimo : null;
+    servidorUltimo = u && u.toMillis ? u.toMillis() : (typeof u === "number" ? u : 0);
+  }, () => {}));
   escuchar("listas", (arr) => (listas = arr.sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99))));
   escuchar("items", (arr) => (items = arr));
 }
@@ -257,6 +262,7 @@ function ocurrencias(ev, desde, hasta) {
 function rango(desde, hasta) {
   const out = [];
   for (const ev of eventos) {
+    if (ev.oculto) continue; // evento de Google Calendar que ocultaron en la app
     for (const f of ocurrencias(ev, desde, hasta)) {
       if ((ev.omitidas || []).includes(f)) continue;
       out.push({ ev, fecha: f });
@@ -340,6 +346,7 @@ function tarjeta(o, conFecha) {
   let iconos = "";
   if ((ev.recordatorios || []).length) iconos += " 🔔";
   if (ev.repetir && ev.repetir !== "no") iconos += " ↻";
+  if ((ev.origen || "").startsWith("gcal")) iconos += " 📆";
   return `<button class="card ${esHecho(o) ? "hecho" : ""}" data-ev="${ev.id}" data-f="${o.fecha}">
     <span class="barra" style="background:${esc(c.color)}"></span>
     <span class="cuerpo">${(ev.para || []).length ? `<span class="tags">${etiquetasPara(ev)}</span>` : ""}<span class="t">${esc(ev.titulo)}</span><span class="s">${partes.join(" · ")}${iconos}</span></span>
@@ -488,7 +495,9 @@ function vistaAjustes() {
     <select data-pref-avisos><option value="todo" ${pref === "todo" ? "selected" : ""}>Todos los eventos</option>
     <option value="mio" ${pref === "mio" ? "selected" : ""}>Solo los míos y los de ambos</option></select></div>
     <p class="vacio" style="margin:0">${pushConfigurado
-      ? "Los avisos los envía el programa en Python cada 10 minutos, aunque la app esté cerrada. Los domingos en la noche llega un resumen de la semana."
+      ? (Date.now() - servidorUltimo < 40 * 60000
+        ? "🟢 El programa de avisos está activo: revisa cada 10 minutos y te avisa aunque la app esté cerrada. Los domingos a las 7 p.m. llega el resumen de la semana."
+        : "⚪ El programa de avisos aún no está activo. Mientras tanto, los avisos salen cuando la app está abierta.")
       : "Los avisos salen cuando la app está abierta. Para una alarma garantizada usa <b>“Añadir a Google Calendar”</b> en cada evento."}</p></div>`;
 
   html += `<p class="seccion">Familia (para quién es cada actividad)</p><div class="caja">` + familia.map((f) => `
@@ -569,6 +578,7 @@ function formEvento(ev = {}, fechaDefault) {
   const rep = ev.repetir || "no";
   const quienes = [...miembrosOrden().map((m) => [m.id, m.nombre || m.email]), ["ambos", "Ambos"], ["", "Nadie en particular"]];
   abrirHoja(`<h2>${ev.id ? "Editar" : "Nuevo evento"}</h2>
+  ${(ev.origen || "").startsWith("gcal") ? `<p class="aviso">📆 Viene de Google Calendar: si cambias título, fecha u hora aquí, se volverán a poner como estén en Google. Cámbialos allá.</p>` : ""}
   <form data-form="evento" data-id="${ev.id || ""}" novalidate>
     <div class="campo"><span class="etq">Categoría</span><input type="hidden" name="categoriaId" value="${esc(catSel)}">
       <div class="chips envolver" data-grupo="categoriaId">${cats.map((c) => chipBtn("data-pick", c.id, c.nombre, c.id === catSel, c.color)).join("")}</div></div>
@@ -664,9 +674,11 @@ function detalleEvento(id, fecha) {
     <div class="fila-btns">
       <button class="btn ${esHecho(o) ? "" : "primario"}" data-accion="hecho" data-ev="${ev.id}" data-f="${fecha}">${esHecho(o) ? "Desmarcar" : "✓ Marcar como hecho"}</button>
     </div>
-    <div class="fila-btns">
+    ${(ev.origen || "").startsWith("gcal")
+      ? `<p class="aviso" style="margin-top:12px">📆 Viene del Google Calendar de ${ev.origen === "gcal-mama" ? "Mamá" : "Papá"}. El título, la fecha y la hora se cambian allá. Aquí puedes marcar para quién es, qué llevar y los avisos.</p>`
+      : `<div class="fila-btns">
       <a class="btn" style="text-align:center;text-decoration:none" href="${urlGoogleCal(ev, fecha)}" target="_blank" rel="noopener">Añadir a Google Calendar</a>
-    </div>
+    </div>`}
     <div class="fila-btns">
       <button class="btn" data-accion="editar" data-ev="${ev.id}">Editar</button>
       <button class="btn" data-accion="duplicar" data-ev="${ev.id}">Duplicar</button>
@@ -745,6 +757,12 @@ document.addEventListener("click", async (e) => {
     }
     case "borrar-ev": {
       const ev = eventos.find((x) => x.id === d.ev);
+      if ((ev.origen || "").startsWith("gcal")) {
+        if (confirm("Este evento viene de Google Calendar. ¿Ocultarlo en la app? (En Google Calendar sigue igual)")) {
+          updateDoc(doc(db, "eventos", d.ev), { oculto: true }).catch(fallo); cerrarHoja(); toast("Oculto en la app");
+        }
+        return;
+      }
       if (ev.repetir && ev.repetir !== "no") {
         abrirHoja(`<h2>Borrar “${esc(ev.titulo)}”</h2><p>Este evento se repite.</p>
           <div class="fila-btns"><button class="btn" data-accion="borrar-uno" data-ev="${ev.id}" data-f="${d.f}">Solo el ${fechaBonita(d.f).toLowerCase()}</button></div>
@@ -921,7 +939,8 @@ async function activarPush(silencioso) {
 // ---------- Avisos locales (si el programa en Python no está activo) ----------
 function revisarAvisos() {
   if (!yo || !("Notification" in window) || Notification.permission !== "granted") return;
-  if (localStorage.getItem("pushToken")) return; // los manda el programa en Python (evita avisos dobles)
+  // Si el programa en Python está activo y este teléfono recibe sus avisos, no duplicar
+  if (localStorage.getItem("pushToken") && Date.now() - servidorUltimo < 40 * 60000) return;
   const ahora = Date.now();
   const pref = localStorage.getItem("avisosDe") || "todo";
   let enviados = {};

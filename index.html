@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#534AB7">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Agenda familiar</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <!-- Pantalla de entrada -->
+  <section id="pantalla-login" class="login oculto">
+    <div class="login-caja">
+      <img src="icon-192.png" alt="" width="72" height="72">
+      <h1 id="login-titulo">Agenda familiar</h1>
+      <p id="login-msg">Solo para nosotros dos. Entra con tu cuenta de Google.</p>
+      <button id="btn-login" class="btn primario grande">Entrar con Google</button>
+    </div>
+  </section>
+
+  <!-- App -->
+  <section id="pantalla-app" class="oculto">
+    <header class="cabecera">
+      <div>
+        <p class="cab-fecha" id="cab-fecha"></p>
+        <h1 class="cab-titulo" id="cab-titulo">Hoy</h1>
+      </div>
+      <div class="cab-avatares" id="cab-avatares"></div>
+    </header>
+
+    <main id="vista"></main>
+
+    <nav class="nav">
+      <button data-nav="hoy" class="activo"><span class="ico">⌂</span>Hoy</button>
+      <button data-nav="calendario"><span class="ico">▦</span>Calendario</button>
+      <button data-nav="nuevo" class="nav-mas"><span class="ico">＋</span>Agregar</button>
+      <button data-nav="listas"><span class="ico">☑</span>Listas</button>
+      <button data-nav="ajustes"><span class="ico">⚙</span>Ajustes</button>
+    </nav>
+  </section>
+
+  <!-- Hoja inferior (formularios y detalles) -->
+  <div id="velo" class="velo oculto"></div>
+  <div id="hoja" class="hoja oculto" role="dialog" aria-modal="true"></div>
+
+  <div id="toast" class="toast oculto"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

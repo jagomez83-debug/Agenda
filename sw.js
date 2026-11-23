@@ -1,5 +1,5 @@
 // Service worker: permite instalar la app, abrirla sin internet y mostrar avisos.
-const CACHE = "agenda-v5";
+const CACHE = "agenda-v6";
 const ARCHIVOS = ["./", "index.html", "app.js", "config.js", "estilos.css", "manifest.webmanifest",
   "icon-192.png", "icon-512.png"];
 

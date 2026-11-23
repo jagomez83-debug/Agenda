@@ -89,9 +89,16 @@ def correr_avisos(db, simular: bool) -> None:
         calendario.sincronizar(db, simular=simular)
     except Exception as e:  # un problema con el calendario no debe frenar los avisos
         print(f"Sincronización de calendario falló: {type(e).__name__}: {e}")
-    # 2) Avisar a la app que el programa está activo (la app deja de mandar avisos locales para no duplicar)
+    # 2) Copiar los eventos de la app al Google Calendar compartido (si hay secreto GCAL_FAMILIA_ID)
+    gcal_familia = False
+    try:
+        import gcal_escritura
+        gcal_familia = gcal_escritura.sincronizar(db, simular=simular)
+    except Exception as e:
+        print(f"Copia a Google Calendar falló: {type(e).__name__}: {e}")
+    # 3) Avisar a la app que el programa está activo (la app deja de mandar avisos locales para no duplicar)
     if not simular:
-        db.collection("estado").document("servidor").set({"ultimo": ahora})
+        db.collection("estado").document("servidor").set({"ultimo": ahora, "gcalFamilia": gcal_familia})
     eventos = leer(db, "eventos")
     miembros = {m["id"]: m for m in leer(db, "miembros")}
     familia = {f["id"]: f for f in leer(db, "familia")}

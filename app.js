@@ -98,6 +98,7 @@ let desuscribir = [];
 let sembrado = false;
 let promptInstalar = null;
 let servidorUltimo = 0;   // última vez que corrió el programa en Python (ms)
+let gcalFamilia = false;  // el programa copia los eventos al Google Calendar "Agenda familiar"
 
 // ---------- Firebase ----------
 const configLista = !String(firebaseConfig.apiKey).startsWith("PEGA");
@@ -192,6 +193,7 @@ function suscribir() {
   desuscribir.push(onSnapshot(doc(db, "estado", "servidor"), (d) => {
     const u = d.exists() ? d.data().ultimo : null;
     servidorUltimo = u && u.toMillis ? u.toMillis() : (typeof u === "number" ? u : 0);
+    gcalFamilia = d.exists() && !!d.data().gcalFamilia;
   }, () => {}));
   escuchar("listas", (arr) => (listas = arr.sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99))));
   escuchar("items", (arr) => (items = arr));
@@ -496,7 +498,8 @@ function vistaAjustes() {
     <option value="mio" ${pref === "mio" ? "selected" : ""}>Solo los míos y los de ambos</option></select></div>
     <p class="vacio" style="margin:0">${pushConfigurado
       ? (Date.now() - servidorUltimo < 40 * 60000
-        ? "🟢 El programa de avisos está activo: revisa cada 10 minutos y te avisa aunque la app esté cerrada. Los domingos a las 7 p.m. llega el resumen de la semana."
+        ? "🟢 El programa de avisos está activo: revisa cada 10 minutos y te avisa aunque la app esté cerrada. Los domingos a las 7 p.m. llega el resumen de la semana." +
+          (gcalFamilia ? " Todo lo que agreguen aquí se copia solo al Google Calendar “Agenda familiar”." : "")
         : "⚪ El programa de avisos aún no está activo. Mientras tanto, los avisos salen cuando la app está abierta.")
       : "Los avisos salen cuando la app está abierta. Para una alarma garantizada usa <b>“Añadir a Google Calendar”</b> en cada evento."}</p></div>`;
 
@@ -676,7 +679,9 @@ function detalleEvento(id, fecha) {
     </div>
     ${(ev.origen || "").startsWith("gcal")
       ? `<p class="aviso" style="margin-top:12px">📆 Viene del Google Calendar de ${ev.origen === "gcal-mama" ? "Mamá" : "Papá"}. El título, la fecha y la hora se cambian allá. Aquí puedes marcar para quién es, qué llevar y los avisos.</p>`
-      : `<div class="fila-btns">
+      : gcalFamilia
+        ? `<p class="vacio" style="margin-top:12px">📆 Se copia solo al calendario “Agenda familiar” de Google (en máximo 10 minutos).</p>`
+        : `<div class="fila-btns">
       <a class="btn" style="text-align:center;text-decoration:none" href="${urlGoogleCal(ev, fecha)}" target="_blank" rel="noopener">Añadir a Google Calendar</a>
     </div>`}
     <div class="fila-btns">

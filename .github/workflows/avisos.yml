@@ -1,6 +1,6 @@
 name: Avisos de la agenda
 
-# Cada 10 minutos: copia el Google Calendar a la app y manda los avisos al celular.
+# Cada 10 minutos: copia Google Calendar ↔ app y manda los avisos al celular.
 # Domingos 7:00 p.m. (CDMX): resumen de la semana.
 on:
   schedule:
@@ -53,6 +53,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           GCAL_ICS_MAMA: ${{ secrets.GCAL_ICS_MAMA }}
           GCAL_ICS_PAPA: ${{ secrets.GCAL_ICS_PAPA }}
+          GCAL_FAMILIA_ID: ${{ secrets.GCAL_FAMILIA_ID }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             MODO="${{ github.event.inputs.modo }}"

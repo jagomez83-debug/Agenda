@@ -117,7 +117,10 @@ function toast(msg) {
 const fallo = (e) => { console.error(e); toast("No se pudo guardar. Revisa tu conexión."); };
 
 // ---------- Entrada ----------
+const quitarCargando = () => document.getElementById("cargando")?.classList.add("oculto");
+
 function mostrarLogin(msg) {
+  quitarCargando();
   $("#pantalla-app").classList.add("oculto");
   $("#pantalla-login").classList.remove("oculto");
   $("#login-titulo").textContent = NOMBRE_APP;
@@ -152,6 +155,7 @@ if (!configLista) {
       return;
     }
     yo = u;
+    quitarCargando();
     $("#pantalla-login").classList.add("oculto");
     $("#pantalla-app").classList.remove("oculto");
     // Registrar/actualizar mi perfil (sin pisar el apodo si ya existe)
@@ -974,5 +978,4 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { re
 setInterval(() => { if (vista === "hoy" && !document.hidden && $("#hoja").classList.contains("oculto")) render(); }, 5 * 60000);
 
 // ---------- Instalación ----------
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); promptInstalar = e; if (vista === "ajustes") render(); });

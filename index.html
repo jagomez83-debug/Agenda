@@ -12,6 +12,16 @@
   <link rel="stylesheet" href="estilos.css">
 </head>
 <body>
+  <!-- Cargando (se ve de inmediato; si algo falla muestra cómo reintentar) -->
+  <section id="cargando" class="login">
+    <div class="login-caja">
+      <img src="icon-192.png" alt="" width="72" height="72">
+      <h1>Agenda familiar</h1>
+      <p id="cargando-msg">Cargando…</p>
+      <button id="btn-reintentar" class="btn primario grande oculto" onclick="location.reload()">Reintentar</button>
+    </div>
+  </section>
+
   <!-- Pantalla de entrada -->
   <section id="pantalla-login" class="login oculto">
     <div class="login-caja">
@@ -49,6 +59,20 @@
 
   <div id="toast" class="toast oculto"></div>
 
-  <script type="module" src="app.js"></script>
+  <script>
+    // Si en 12 segundos no cargó (sin señal o error), ofrecer reintentar
+    window.__falloCarga = function (msg) {
+      var c = document.getElementById("cargando");
+      if (!c || c.classList.contains("oculto") || !document.getElementById("btn-reintentar").classList.contains("oculto")) return;
+      document.getElementById("cargando-msg").textContent = msg;
+      document.getElementById("btn-reintentar").classList.remove("oculto");
+    };
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});
+    setTimeout(function () { window.__falloCarga("Está tardando. Revisa tu señal o internet y toca Reintentar."); }, 12000);
+    window.addEventListener("error", function (e) {
+      if (e && e.target && e.target.tagName === "SCRIPT") window.__falloCarga("No se pudo cargar la app. Revisa tu internet y toca Reintentar.");
+    }, true);
+  </script>
+  <script type="module" src="app.js" onerror="window.__falloCarga('No se pudo cargar la app. Revisa tu internet y toca Reintentar.')"></script>
 </body>
 </html>

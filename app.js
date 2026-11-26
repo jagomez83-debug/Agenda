@@ -397,6 +397,62 @@ function proximosAvisos() {
   return out.sort((a, b) => a.t - b.t).slice(0, 4);
 }
 
+// ---------- Resumen del mes ----------
+const resumenAbierto = new Set();   // qué listas del resumen están abiertas (se conserva al redibujar)
+
+function finDeMes(s) { const d = fparse(s); return fstr(new Date(d.getFullYear(), d.getMonth() + 1, 0)); }
+
+function porPersona(lista) {
+  const c = {};
+  lista.forEach((o) => {
+    const ps = (o.ev.para || []).filter(fam);
+    (ps.length ? ps : ["general"]).forEach((p) => (c[p] = (c[p] || 0) + 1));
+  });
+  return Object.entries(c).sort((x, y) => y[1] - x[1]).map(([p, n]) => {
+    const f = fam(p);
+    return f ? `<span class="tag" style="color:${esc(f.color)};border-color:${esc(f.color)}">${esc(f.nombre)} ${n}</span>`
+      : `<span class="tag" style="color:var(--texto2);border-color:var(--linea)">General ${n}</span>`;
+  }).join("");
+}
+
+function listaResumen(clave, titulo, lista, vacio) {
+  const abierto = resumenAbierto.has(clave);
+  return `<details class="res-det" data-res="${clave}" ${abierto ? "open" : ""}>
+    <summary>${titulo} <span class="res-n">${lista.length}</span></summary>
+    ${lista.length ? `<div class="tags" style="margin:6px 0 8px">${porPersona(lista)}</div>` + lista.map((o) => tarjeta(o, true)).join("") : `<p class="vacio">${vacio}</p>`}
+  </details>`;
+}
+
+function resumenMes() {
+  const h = hoy(), d = fparse(h);
+  const ini = fstr(new Date(d.getFullYear(), d.getMonth(), 1)), fin = finDeMes(h);
+  const sigIni = addDias(fin, 1), sigFin = finDeMes(sigIni);
+  const delMes = filtrar(rango(ini, fin));
+  const cumplidas = delMes.filter(esHecho);
+  const sinMarcar = delMes.filter((o) => !esHecho(o) && o.fecha < h);
+  const porVenir = delMes.filter((o) => !esHecho(o) && o.fecha >= h);
+  const siguiente = filtrar(rango(sigIni, sigFin));
+  const hastaHoy = cumplidas.length + sinMarcar.length;
+  const pct = hastaHoy ? Math.round((cumplidas.filter((o) => o.fecha <= h).length / hastaHoy) * 100) : 0;
+  const pendLista = items.filter((i) => !i.hecho && i.listaId === "pendientes").length;
+  const mes = MESES[d.getMonth()], mesSig = MESES[fparse(sigIni).getMonth()];
+
+  return `<div class="caja resumen">
+    <p class="res-tit">Resumen de ${mes}</p>
+    <div class="res-cifras">
+      <div class="res-cifra ok"><b>${cumplidas.length}</b><span>Cumplidas</span></div>
+      <div class="res-cifra pend"><b>${sinMarcar.length + porVenir.length}</b><span>Pendientes</span></div>
+      <div class="res-cifra sig"><b>${siguiente.length}</b><span>En ${mesSig}</span></div>
+    </div>
+    ${hastaHoy ? `<div class="res-barra" title="${pct}%"><i style="width:${pct}%"></i></div>
+    <p class="vacio" style="margin:2px 0 6px;padding:0;font-size:13px">${pct}% de lo que ya pasó este mes está marcado como hecho${sinMarcar.length ? ` · ${sinMarcar.length} sin marcar` : ""}${pendLista ? ` · ${pendLista} en la lista de pendientes` : ""}</p>` : ""}
+    ${listaResumen("cumplidas", "✓ Cumplidas este mes", cumplidas.slice().reverse(), "Aún no marcan nada como hecho. Toquen un evento → “Marcar como hecho”.")}
+    ${listaResumen("sinmarcar", "⚠ Pasaron sin marcar", sinMarcar.slice().reverse(), "Todo lo que ya pasó está marcado. ¡Bien!")}
+    ${listaResumen("porvenir", `Lo que falta de ${mes}`, porVenir, "No hay nada más este mes.")}
+    ${listaResumen("siguiente", `Próximas en ${mesSig}`, siguiente, `Todavía no hay nada en ${mesSig}.`)}
+  </div>`;
+}
+
 function vistaHoy() {
   const h = hoy();
   const todos = filtrar(rango(addDias(h, -14), addDias(h, 14)));
@@ -404,7 +460,7 @@ function vistaHoy() {
   const deHoy = todos.filter((o) => o.fecha === h);
   const manana = todos.filter((o) => o.fecha === addDias(h, 1));
   const prox = todos.filter((o) => o.fecha > addDias(h, 1));
-  let html = chipsFiltro();
+  let html = chipsFiltro() + resumenMes();
 
   const av = proximosAvisos();
   if (av.length) {
@@ -852,6 +908,13 @@ document.addEventListener("click", async (e) => {
 
   if (d.ev && t.classList.contains("card")) detalleEvento(d.ev, d.f);
 });
+
+document.addEventListener("toggle", (e) => {
+  const d = e.target;
+  if (d.matches && d.matches("details[data-res]")) {
+    if (d.open) resumenAbierto.add(d.dataset.res); else resumenAbierto.delete(d.dataset.res);
+  }
+}, true);
 
 document.addEventListener("change", (e) => {
   const t = e.target, d = t.dataset;

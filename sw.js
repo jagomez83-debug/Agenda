@@ -1,6 +1,6 @@
 // Service worker: abre la app al instante (aunque no haya señal), se actualiza
 // en segundo plano y muestra los avisos que manda el programa en Python.
-const VERSION = "agenda-v9";
+const VERSION = "agenda-v10";
 const SDK_CACHE = "firebase-sdk-11.0.2";   // no se borra al actualizar la app
 const ARCHIVOS = ["./", "index.html", "app.js", "config.js", "estilos.css", "manifest.webmanifest",
   "icon-192.png", "icon-512.png"];

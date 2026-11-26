@@ -1,0 +1,41 @@
+name: Copiar Firebase SDK al sitio
+
+# Descarga las librerías de Firebase y las guarda en sdk/ para que la app
+# no dependa de los servidores de Google al abrir. Se corre al cambiar sdk/VERSION.
+on:
+  push:
+    paths: ["sdk/VERSION"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  copiar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Descargar
+        run: |
+          V=$(tr -d '[:space:]' < sdk/VERSION)
+          BASE="https://www.gstatic.com/firebasejs/$V"
+          cd sdk
+          for f in firebase-app firebase-auth firebase-firestore firebase-messaging; do
+            curl -fsSL "$BASE/$f.js" -o "$f.js"
+          done
+          # Cualquier otra pieza que importen
+          for i in 1 2 3; do
+            for u in $(grep -ho "https://www.gstatic.com/firebasejs/$V/[a-zA-Z0-9_.-]*\.js" *.js | sort -u); do
+              n=$(basename "$u"); [ -f "$n" ] || curl -fsSL "$u" -o "$n"
+            done
+          done
+          # Que se importen entre sí desde aquí mismo
+          sed -i "s#https://www.gstatic.com/firebasejs/$V/#./#g" *.js
+          ls -la
+      - name: Guardar en el repositorio
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sdk
+          git diff --cached --quiet || git commit -m "Firebase SDK $(cat sdk/VERSION) en sdk/"
+          git push

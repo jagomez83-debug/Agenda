@@ -2,18 +2,18 @@
 //  Agenda familiar — app compartida para dos personas
 //  Firebase (Google Login + Firestore en tiempo real)
 // ============================================================
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { initializeApp } from "./sdk/firebase-app.js";
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
   onAuthStateChanged, signOut
-} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+} from "./sdk/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, writeBatch,
   serverTimestamp, arrayUnion, arrayRemove, FieldPath
-} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+} from "./sdk/firebase-firestore.js";
 // Firebase Messaging se carga solo cuando hace falta (no retrasa la apertura)
-const cargarMessaging = () => import("https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging.js");
+const cargarMessaging = () => import("./sdk/firebase-messaging.js");
 import * as CFG from "./config.js";
 const { firebaseConfig, CORREOS_PERMITIDOS, NOMBRE_APP } = CFG;
 const VAPID_KEY = CFG.VAPID_KEY || "";
@@ -132,13 +132,7 @@ function mostrarLogin(msg) {
   if (msg) $("#login-msg").innerHTML = msg;
 }
 
-// Si ya entraron antes en este teléfono, mostrar la app de una vez (los datos llegan en cuanto hay sesión)
-if (configLista && localStorage.getItem("ultimoUsuario")) {
-  quitarCargando();
-  $("#pantalla-app").classList.remove("oculto");
-  $("#cab-fecha").textContent = (() => { const f = fechaLarga(hoy()); return f[0].toUpperCase() + f.slice(1); })();
-  $("#vista").innerHTML = `<p class="vacio" style="padding:24px 4px">Abriendo tu agenda…</p>`;
-}
+// (La pantalla guardada de la última vez ya la muestra index.html al instante, antes de cargar esto)
 
 if (!configLista) {
   mostrarLogin("Falta configurar Firebase. Abre <b>config.js</b> y pega los datos de tu proyecto (ver GUIA.md).");
@@ -320,6 +314,7 @@ function renderPronto() {
 // Redibuja la vista sin perder lo que estás escribiendo (llegan cambios de la otra persona en tiempo real)
 function render() {
   if (!yo) return;
+  document.body.classList.remove("foto");
   const v = $("#vista");
   const a = document.activeElement;
   let clave = null, valor = "";
@@ -342,7 +337,10 @@ function pintar(v) {
   document.querySelectorAll(".nav button").forEach((b) => b.classList.toggle("activo", b.dataset.nav === vista));
   const titulos = { hoy: "Hoy y próximos días", calendario: "Calendario", listas: "Listas", ajustes: "Ajustes" };
   $("#cab-titulo").textContent = titulos[vista] || "";
-  if (vista === "hoy") v.innerHTML = vistaHoy();
+  if (vista === "hoy") {
+    v.innerHTML = vistaHoy();
+    try { localStorage.setItem("fotoHoy", JSON.stringify({ dia: hoy(), html: v.innerHTML, av: $("#cab-avatares").innerHTML })); } catch { /* sin espacio */ }
+  }
   else if (vista === "calendario") v.innerHTML = vistaCalendario();
   else if (vista === "listas") v.innerHTML = vistaListas();
   else if (vista === "ajustes") v.innerHTML = vistaAjustes();

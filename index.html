@@ -13,9 +13,9 @@
   <!-- Descargar en paralelo las piezas que la app necesita al abrir -->
   <link rel="modulepreload" href="app.js">
   <link rel="modulepreload" href="config.js">
-  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js" crossorigin>
-  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js" crossorigin>
-  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js" crossorigin>
+  <link rel="modulepreload" href="sdk/firebase-app.js">
+  <link rel="modulepreload" href="sdk/firebase-auth.js">
+  <link rel="modulepreload" href="sdk/firebase-firestore.js">
 </head>
 <body>
   <!-- Cargando (se ve de inmediato; si algo falla muestra cómo reintentar) -->
@@ -66,6 +66,21 @@
   <div id="toast" class="toast oculto"></div>
 
   <script>
+    // Mostrar al instante la pantalla "Hoy" tal como quedó la última vez, mientras carga lo demás
+    (function () {
+      try {
+        if (!localStorage.getItem("ultimoUsuario")) return;
+        var f = JSON.parse(localStorage.getItem("fotoHoy") || "null");
+        var d = new Date(), hoy = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+        document.getElementById("cargando").classList.add("oculto");
+        document.getElementById("pantalla-app").classList.remove("oculto");
+        document.body.classList.add("foto");
+        var fecha = d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }).replace(",", "");
+        document.getElementById("cab-fecha").textContent = fecha.charAt(0).toUpperCase() + fecha.slice(1);
+        document.getElementById("vista").innerHTML = f && f.dia === hoy ? f.html : '<p class="vacio" style="padding:24px 4px">Abriendo tu agenda…</p>';
+        if (f && f.av) document.getElementById("cab-avatares").innerHTML = f.av;
+      } catch (e) { /* si algo falla, se ve la pantalla normal de carga */ }
+    })();
     // Si en 12 segundos no cargó (sin señal o error), ofrecer reintentar
     window.__falloCarga = function (msg) {
       var c = document.getElementById("cargando");

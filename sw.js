@@ -1,22 +1,29 @@
 // Service worker: abre la app al instante (aunque no haya señal), se actualiza
 // en segundo plano y muestra los avisos que manda el programa en Python.
-const CACHE = "agenda-v8";
+const VERSION = "agenda-v9";
+const SDK_CACHE = "firebase-sdk-11.0.2";   // no se borra al actualizar la app
 const ARCHIVOS = ["./", "index.html", "app.js", "config.js", "estilos.css", "manifest.webmanifest",
   "icon-192.png", "icon-512.png"];
-const SDK = "https://www.gstatic.com/firebasejs/";
+const SDK = ["sdk/firebase-app.js", "sdk/firebase-auth.js", "sdk/firebase-firestore.js", "sdk/firebase-messaging.js"];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    await (await caches.open(VERSION)).addAll(ARCHIVOS);
+    const sdk = await caches.open(SDK_CACHE);
+    for (const f of SDK) {                       // solo se descarga si no está guardado
+      if (!(await sdk.match(f))) { try { await sdk.add(f); } catch { /* se guarda al usarse */ } }
+    }
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== VERSION && k !== SDK_CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
-// Pide a la red como máximo `ms` milisegundos
 function conLimite(req, ms) {
   return new Promise((ok, mal) => {
     const t = setTimeout(() => mal(new Error("tiempo")), ms);
@@ -24,30 +31,31 @@ function conLimite(req, ms) {
   });
 }
 
-// Copia guardada primero (abre al instante); en paralelo baja la versión nueva para la próxima vez.
-async function guardadaPrimero(e, claveCache) {
-  const cache = await caches.open(CACHE);
-  const guardada = await cache.match(claveCache || e.request, { ignoreSearch: true });
-  const nueva = fetch(e.request).then((r) => {
-    if (r && (r.ok || r.type === "opaque")) cache.put(claveCache || e.request, r.clone());
-    return r;
-  }).catch(() => null);
-  if (guardada) { e.waitUntil(nueva); return guardada; }
+// Copia guardada primero (instantáneo). Si hay copia, se revisa la red en segundo plano.
+async function guardadaPrimero(e, nombreCache, clave, actualizar) {
+  const cache = await caches.open(nombreCache);
+  const req = clave || e.request;
+  const guardada = await cache.match(req, { ignoreSearch: true });
+  if (guardada) {
+    if (actualizar) e.waitUntil(fetch(e.request).then((r) => r.ok && cache.put(req, r)).catch(() => {}));
+    return guardada;
+  }
   try {
-    const r = await conLimite(e.request, 8000);
-    if (r) return r;
-  } catch { /* sin señal */ }
-  return (await cache.match("index.html")) || new Response("Sin conexión", { status: 503 });
+    const r = await conLimite(e.request, 15000);
+    if (r.ok) cache.put(req, r.clone());
+    return r;
+  } catch {
+    return (await caches.match("index.html")) || new Response("Sin conexión", { status: 503 });
+  }
 }
 
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
-  if (e.request.mode === "navigate" && url.origin === self.location.origin) {
-    e.respondWith(guardadaPrimero(e, "index.html"));
-  } else if (url.origin === self.location.origin || e.request.url.startsWith(SDK)) {
-    e.respondWith(guardadaPrimero(e));
-  }
+  if (url.origin !== self.location.origin) return;
+  if (e.request.mode === "navigate") e.respondWith(guardadaPrimero(e, VERSION, "index.html", true));
+  else if (url.pathname.includes("/sdk/")) e.respondWith(guardadaPrimero(e, SDK_CACHE, null, false)); // no cambian
+  else e.respondWith(guardadaPrimero(e, VERSION, null, true));
 });
 
 // Avisos que manda el programa en Python (Firebase Cloud Messaging)
@@ -61,7 +69,6 @@ self.addEventListener("push", (e) => {
   }));
 });
 
-// Al tocar un aviso, abre (o enfoca) la app.
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
   e.waitUntil(

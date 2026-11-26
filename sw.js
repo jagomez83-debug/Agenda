@@ -1,6 +1,6 @@
 // Service worker: abre la app al instante (aunque no haya señal), se actualiza
 // en segundo plano y muestra los avisos que manda el programa en Python.
-const CACHE = "agenda-v7";
+const CACHE = "agenda-v8";
 const ARCHIVOS = ["./", "index.html", "app.js", "config.js", "estilos.css", "manifest.webmanifest",
   "icon-192.png", "icon-512.png"];
 const SDK = "https://www.gstatic.com/firebasejs/";

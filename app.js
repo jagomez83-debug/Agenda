@@ -12,13 +12,18 @@ import {
   collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, writeBatch,
   serverTimestamp, arrayUnion, arrayRemove, FieldPath
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
-import {
-  getMessaging, getToken, isSupported as pushSoportado
-} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging.js";
+// Firebase Messaging se carga solo cuando hace falta (no retrasa la apertura)
+const cargarMessaging = () => import("https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging.js");
 import * as CFG from "./config.js";
 const { firebaseConfig, CORREOS_PERMITIDOS, NOMBRE_APP } = CFG;
 const VAPID_KEY = CFG.VAPID_KEY || "";
 const pushConfigurado = VAPID_KEY && !VAPID_KEY.startsWith("PEGA");
+
+// ---------- Tiempos de apertura (se ven en Ajustes) ----------
+const T0 = performance.timeOrigin ? 0 : Date.now();
+const tiempos = {};
+const marcar = (k) => { if (!(k in tiempos)) tiempos[k] = Math.round(performance.now() - T0); };
+marcar("código");
 
 // ---------- Utilidades ----------
 const $ = (s) => document.querySelector(s);
@@ -127,6 +132,14 @@ function mostrarLogin(msg) {
   if (msg) $("#login-msg").innerHTML = msg;
 }
 
+// Si ya entraron antes en este teléfono, mostrar la app de una vez (los datos llegan en cuanto hay sesión)
+if (configLista && localStorage.getItem("ultimoUsuario")) {
+  quitarCargando();
+  $("#pantalla-app").classList.remove("oculto");
+  $("#cab-fecha").textContent = (() => { const f = fechaLarga(hoy()); return f[0].toUpperCase() + f.slice(1); })();
+  $("#vista").innerHTML = `<p class="vacio" style="padding:24px 4px">Abriendo tu agenda…</p>`;
+}
+
 if (!configLista) {
   mostrarLogin("Falta configurar Firebase. Abre <b>config.js</b> y pega los datos de tu proyecto (ver GUIA.md).");
   $("#btn-login").classList.add("oculto");
@@ -137,17 +150,23 @@ if (!configLista) {
     try { await signInWithPopup(auth, prov); }
     catch (e) {
       if (["auth/popup-blocked", "auth/operation-not-supported-in-this-environment"].includes(e.code)) {
+        sessionStorage.setItem("redirigiendo", "1");
         signInWithRedirect(auth, prov);
       } else if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") {
         toast("No se pudo entrar: " + e.code);
       }
     }
   });
-  getRedirectResult(auth).catch(() => {});
+  // Solo se revisa el regreso de Google si de verdad se usó ese método (revisarlo siempre hace lenta la apertura)
+  if (sessionStorage.getItem("redirigiendo")) {
+    sessionStorage.removeItem("redirigiendo");
+    getRedirectResult(auth).catch(() => {});
+  }
 
   onAuthStateChanged(auth, async (u) => {
     desuscribir.forEach((f) => f()); desuscribir = [];
-    if (!u) { yo = null; mostrarLogin("Solo para nosotros dos. Entra con tu cuenta de Google."); return; }
+    marcar("sesión");
+    if (!u) { yo = null; localStorage.removeItem("ultimoUsuario"); mostrarLogin("Solo para nosotros dos. Entra con tu cuenta de Google."); return; }
     const email = (u.email || "").toLowerCase();
     if (!correos.includes(email)) {
       await signOut(auth);
@@ -155,6 +174,7 @@ if (!configLista) {
       return;
     }
     yo = u;
+    localStorage.setItem("ultimoUsuario", "1");
     quitarCargando();
     $("#pantalla-login").classList.add("oculto");
     $("#pantalla-app").classList.remove("oculto");
@@ -169,7 +189,8 @@ if (!configLista) {
 function suscribir() {
   const escuchar = (col, fn) => desuscribir.push(onSnapshot(collection(db, col), (snap) => {
     fn(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    render();
+    if (col === "eventos") marcar(snap.metadata.fromCache ? "datos (guardados)" : "datos (internet)");
+    renderPronto();
   }, (e) => { console.error(e); toast("Sin permiso para leer datos. Revisa las reglas de Firestore."); }));
 
   escuchar("miembros", (arr) => {
@@ -289,6 +310,13 @@ function momento(o) {
 }
 
 // ---------- Render ----------
+let renderPendiente = false;
+function renderPronto() {
+  if (renderPendiente) return;
+  renderPendiente = true;
+  requestAnimationFrame(() => { renderPendiente = false; render(); marcar("pantalla"); });
+}
+
 // Redibuja la vista sin perder lo que estás escribiendo (llegan cambios de la otra persona en tiempo real)
 function render() {
   if (!yo) return;
@@ -520,6 +548,8 @@ function vistaAjustes() {
     <button class="x" data-cat-borrar="${c.id}" aria-label="Borrar">×</button></div>`).join("") +
     `<form class="agregar-fila" data-form="categoria" style="margin:10px 0 0"><input name="nombreCat" placeholder="Nueva categoría (ej. Natación)" required><button class="btn">Agregar</button></form></div>`;
 
+  const tt = Object.entries(tiempos).map(([k, v]) => `${k}: ${(v / 1000).toFixed(1)} s`).join(" · ");
+  if (tt) html += `<p class="vacio" style="font-size:12px">Apertura de hoy — ${tt}</p>`;
   html += `<div class="fila-btns">`;
   if (promptInstalar) html += `<button class="btn primario" data-accion="instalar">Instalar app</button>`;
   html += `<button class="btn" data-accion="salir">Cerrar sesión</button></div>`;
@@ -926,7 +956,9 @@ document.addEventListener("submit", (e) => {
 // ---------- Avisos push (los envía el programa en Python) ----------
 async function activarPush(silencioso) {
   try {
-    if (!pushConfigurado || !(await pushSoportado())) return false;
+    if (!pushConfigurado) return false;
+    const { getMessaging, getToken, isSupported } = await cargarMessaging();
+    if (!(await isSupported())) return false;
     const reg = await navigator.serviceWorker.ready;
     const token = await getToken(getMessaging(appFb), { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
     if (!token) return false;

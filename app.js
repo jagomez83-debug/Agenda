@@ -602,6 +602,13 @@ function vistaAjustes() {
     <button class="x" data-cat-borrar="${c.id}" aria-label="Borrar">×</button></div>`).join("") +
     `<form class="agregar-fila" data-form="categoria" style="margin:10px 0 0"><input name="nombreCat" placeholder="Nueva categoría (ej. Natación)" required><button class="btn">Agregar</button></form></div>`;
 
+  html += `<p class="seccion">Versión de la app</p><div class="caja">
+    <p style="margin:0 0 8px" id="version-app">Revisando…</p>
+    <button class="btn grande" data-accion="actualizar">Buscar actualización</button></div>`;
+  setTimeout(() => {
+    navigator.serviceWorker?.controller?.postMessage("version");
+    if (!navigator.serviceWorker?.controller) { const v = $("#version-app"); if (v) v.textContent = "Sin versión guardada"; }
+  }, 0);
   const tt = Object.entries(tiempos).map(([k, v]) => `${k}: ${(v / 1000).toFixed(1)} s`).join(" · ");
   if (tt) html += `<p class="vacio" style="font-size:12px">Apertura de hoy — ${tt}</p>`;
   html += `<div class="fila-btns">`;
@@ -902,11 +909,29 @@ document.addEventListener("click", async (e) => {
       render(); return;
     }
     case "reintentar-push": toast((await activarPush(false)) ? "Listo: avisos con pantalla bloqueada" : "No se pudo activar"); render(); return;
+    case "actualizar": {
+      toast("Buscando actualización…");
+      try {
+        const reg = await navigator.serviceWorker?.getRegistration();
+        await reg?.update();
+        const ks = await caches.keys();
+        await Promise.all(ks.filter((k) => k.startsWith("agenda-")).map((k) => caches.delete(k)));
+      } catch { /* sin service worker */ }
+      setTimeout(() => location.reload(), 600);
+      return;
+    }
     case "instalar": if (promptInstalar) { promptInstalar.prompt(); promptInstalar = null; render(); } return;
     case "salir": if (confirm("¿Cerrar sesión en este teléfono?")) signOut(auth); return;
   }
 
   if (d.ev && t.classList.contains("card")) detalleEvento(d.ev, d.f);
+});
+
+navigator.serviceWorker?.addEventListener("message", (e) => {
+  if (e.data && e.data.tipo === "version") {
+    const v = $("#version-app");
+    if (v) v.textContent = "Versión " + e.data.version.replace("agenda-v", "") + " · se actualiza sola al abrir";
+  }
 });
 
 document.addEventListener("toggle", (e) => {

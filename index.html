@@ -88,7 +88,19 @@
       document.getElementById("cargando-msg").textContent = msg;
       document.getElementById("btn-reintentar").classList.remove("oculto");
     };
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});
+    if ("serviceWorker" in navigator) {
+      var habiaSW = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(function (reg) {
+        reg.update().catch(function () {});   // buscar versión nueva en cada apertura
+      }).catch(function () {});
+      // Cuando se instala una versión nueva, recargar una sola vez para mostrarla
+      navigator.serviceWorker.addEventListener("message", function (e) {
+        if (e.data && e.data.tipo === "actualizada" && habiaSW && !sessionStorage.getItem("recargada-" + e.data.version)) {
+          sessionStorage.setItem("recargada-" + e.data.version, "1");
+          location.reload();
+        }
+      });
+    }
     setTimeout(function () { window.__falloCarga("Está tardando. Revisa tu señal o internet y toca Reintentar."); }, 12000);
     window.addEventListener("error", function (e) {
       if (e && e.target && e.target.tagName === "SCRIPT") window.__falloCarga("No se pudo cargar la app. Revisa tu internet y toca Reintentar.");

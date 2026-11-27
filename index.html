@@ -92,6 +92,12 @@
       var habiaSW = !!navigator.serviceWorker.controller;
       navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(function (reg) {
         reg.update().catch(function () {});   // buscar versión nueva en cada apertura
+        // Android deja la app "dormida": al volver a ella también se busca versión nueva
+        var oculta = 0;
+        document.addEventListener("visibilitychange", function () {
+          if (document.hidden) { oculta = Date.now(); return; }
+          if (Date.now() - oculta > 60000) reg.update().catch(function () {});
+        });
       }).catch(function () {});
       // Cuando se instala una versión nueva, recargar una sola vez para mostrarla
       navigator.serviceWorker.addEventListener("message", function (e) {
